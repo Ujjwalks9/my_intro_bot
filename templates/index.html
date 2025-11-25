@@ -69,13 +69,15 @@
         <h1>Interview Bot</h1>
         <p>Tap the mic to ask me about my background, superpowers, or goals.</p>
         
-        <button id="micBtn" class="mic-btn">🎙️</button>
+        <button id="recordButton" class="mic-btn">🎙️</button>
         <div id="status">Tap to speak</div>
     </div>
 
     <script>
     let mediaRecorder;
     let audioChunks = [];
+    
+    // This looks for id="recordButton", so I fixed the HTML above to match this
     const recordButton = document.getElementById("recordButton");
     const statusDiv = document.getElementById("status");
 
@@ -165,6 +167,4 @@
     }
 </script>
 </body>
-
 </html>
-
