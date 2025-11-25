@@ -1,13 +1,10 @@
 import os
 import uuid
-import asyncio
-import nest_asyncio
 from flask import Flask, render_template, request, jsonify, send_file
 from groq import Groq
-import edge_tts
+from gtts import gTTS
 
 
-nest_asyncio.apply()
 
 app = Flask(__name__)
 
@@ -72,17 +69,16 @@ def process_audio():
         ai_response = completion.choices[0].message.content
         print(f"AI Answer: {ai_response}")
 
-        # 4. Text-to-Speech (Generate Voice) using Edge-TTS
+        # 4. Text-to-Speech (Generate Voice)
+        # Using gTTS - This is synchronous and very stable on Render
         output_audio = f"response_{uuid.uuid4()}.mp3"
         
-        async def generate_voice():
-            communicate = edge_tts.Communicate(ai_response, "en-US-GuyNeural")
-            await communicate.save(output_audio)
+        tts = gTTS(text=ai_response, lang='en', tld='com')
+        tts.save(output_audio)
 
-        asyncio.run(generate_voice())
-
-        
-        os.remove(filename)
+        # Cleanup input file
+        if os.path.exists(filename):
+            os.remove(filename)
 
         
         return send_file(output_audio, mimetype="audio/mpeg")
@@ -94,3 +90,4 @@ def process_audio():
 if __name__ == '__main__':
 
     app.run(debug=True, port=5000)
+
