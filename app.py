@@ -1,5 +1,6 @@
 import os
 import uuid
+import requests
 from flask import Flask, render_template, request, jsonify, send_file
 from groq import Groq
 import subprocess
@@ -69,23 +70,28 @@ def process_audio():
         ai_response = completion.choices[0].message.content
         print(f"AI Answer: {ai_response}")
 
-        # 4. Text-to-Speech (Generate Voice - MALE)
-        # We run this as a system command to ensure stability
-        output_audio = f"response_{uuid.uuid4()}.mp3"
+        # 4. Text-to-Speech (Generate Voice) using Deepgram API (Stable)
+        # Model: aura-orion-en (Male Voice)
+        deepgram_url = "https://api.deepgram.com/v1/speak?model=aura-orion-en"
         
-        # Command: edge-tts --voice en-US-GuyNeural --text "Hello" --write-media output.mp3
-        command = [
-            "edge-tts",
-            "--voice", "en-US-GuyNeural", # Male Voice
-            "--text", ai_response,
-            "--write-media", output_audio
-        ]
+        headers = {
+            "Authorization": f"Token {DEEPGRAM_API_KEY}",
+            "Content-Type": "application/json"
+        }
         
-        subprocess.run(command, check=True)
+        payload = {
+            "text": ai_response
+        }
 
-        # Cleanup input file
-        if os.path.exists(filename):
-            os.remove(filename)
+        response = requests.post(deepgram_url, headers=headers, json=payload)
+        
+        if response.status_code != 200:
+            raise Exception(f"Deepgram Error: {response.text}")
+
+        # Save audio
+        output_audio = f"response_{uuid.uuid4()}.mp3"
+        with open(output_audio, "wb") as f:
+            f.write(response.content)
 
         # Cleanup input file
         if os.path.exists(filename):
@@ -101,5 +107,6 @@ def process_audio():
 if __name__ == '__main__':
 
     app.run(debug=True, port=5000)
+
 
 
