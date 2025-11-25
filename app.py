@@ -2,7 +2,7 @@ import os
 import uuid
 from flask import Flask, render_template, request, jsonify, send_file
 from groq import Groq
-from gtts import gTTS
+import subprocess
 
 
 
@@ -69,12 +69,23 @@ def process_audio():
         ai_response = completion.choices[0].message.content
         print(f"AI Answer: {ai_response}")
 
-        # 4. Text-to-Speech (Generate Voice)
-        # Using gTTS - This is synchronous and very stable on Render
+        # 4. Text-to-Speech (Generate Voice - MALE)
+        # We run this as a system command to ensure stability
         output_audio = f"response_{uuid.uuid4()}.mp3"
         
-        tts = gTTS(text=ai_response, lang='en', tld='com')
-        tts.save(output_audio)
+        # Command: edge-tts --voice en-US-GuyNeural --text "Hello" --write-media output.mp3
+        command = [
+            "edge-tts",
+            "--voice", "en-US-GuyNeural", # Male Voice
+            "--text", ai_response,
+            "--write-media", output_audio
+        ]
+        
+        subprocess.run(command, check=True)
+
+        # Cleanup input file
+        if os.path.exists(filename):
+            os.remove(filename)
 
         # Cleanup input file
         if os.path.exists(filename):
@@ -90,4 +101,5 @@ def process_audio():
 if __name__ == '__main__':
 
     app.run(debug=True, port=5000)
+
 
