@@ -1,6 +1,7 @@
 flask
 groq
-gtts
+edge-tts
 gunicorn
 nest_asyncio
+
 
