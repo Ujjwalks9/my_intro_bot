@@ -3,7 +3,6 @@ import uuid
 import asyncio
 import nest_asyncio
 from flask import Flask, render_template, request, jsonify, send_file
-from openai import OpenAI
 from groq import Groq
 import edge_tts
 
@@ -93,4 +92,5 @@ def process_audio():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
+
     app.run(debug=True, port=5000)
