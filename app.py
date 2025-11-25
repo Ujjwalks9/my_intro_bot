@@ -49,14 +49,27 @@ def process_audio():
         filename = f"temp_{uuid.uuid4()}.webm"
         audio_file.save(filename)
 
-        # 2. Speech-to-Text (Transcribe) using Groq
-        with open(filename, "rb") as file:
-            transcription = client.audio.transcriptions.create(
-                file=(filename, file.read()),
-                model="whisper-large-v3", # using Groq's whisper model
-                response_format="text"
-            )
-        user_text = transcription
+        # 2. Speech-to-Text (Transcribe) using DEEPGRAM (More stable for browser audio)
+        # We send the raw audio bytes directly to Deepgram
+        deepgram_listen_url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true"
+        
+        listen_headers = {
+            "Authorization": f"Token {DEEPGRAM_API_KEY}",
+            "Content-Type": "audio/webm" # Browsers usually send webm
+        }
+
+        response = requests.post(deepgram_listen_url, headers=listen_headers, data=audio_file.read())
+        
+        if response.status_code != 200:
+            raise Exception(f"Deepgram Listen Error: {response.text}")
+            
+        data = response.json()
+        user_text = data['results']['channels'][0]['alternatives'][0]['transcript']
+        
+        # If no speech detected, handle gracefully
+        if not user_text:
+            user_text = "Hello" 
+            
         print(f"User asked: {user_text}")
 
         # 3. AI Intelligence (Generate Answer) using Groq
@@ -107,6 +120,7 @@ def process_audio():
 if __name__ == '__main__':
 
     app.run(debug=True, port=5000)
+
 
 
 
