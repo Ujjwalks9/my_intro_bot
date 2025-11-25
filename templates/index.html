@@ -74,72 +74,97 @@
     </div>
 
     <script>
-        const btn = document.getElementById('micBtn');
-        const status = document.getElementById('status');
-        let mediaRecorder;
-        let audioChunks = [];
+    let mediaRecorder;
+    let audioChunks = [];
+    const recordButton = document.getElementById("recordButton");
+    const statusDiv = document.getElementById("status");
 
-        btn.addEventListener('click', async () => {
-            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-                startRecording();
-            } else {
-                stopRecording();
-            }
-        });
-
-        async function startRecording() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-
-                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
-                mediaRecorder.onstop = sendAudio;
-
-                mediaRecorder.start();
-                btn.classList.add('recording');
-                btn.innerHTML = "⏹️"; // Stop icon
-                status.innerText = "Listening...";
-            } catch (err) {
-                alert("Please allow microphone access!");
-            }
+    recordButton.addEventListener("click", async () => {
+        if (!mediaRecorder || mediaRecorder.state === "inactive") {
+            startRecording();
+        } else {
+            stopRecording();
         }
+    });
 
-        function stopRecording() {
-            mediaRecorder.stop();
-            btn.classList.remove('recording');
-            btn.innerHTML = "🎙️";
-            status.innerText = "Thinking...";
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
+            // Try to use a specific mime type that works well with Whisper
+            let options = { mimeType: 'audio/webm' };
+            if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                options = {}; // Fallback to default if webm isn't supported (e.g. Safari)
+            }
+            
+            mediaRecorder = new MediaRecorder(stream, options);
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = sendAudioToServer;
+
+            mediaRecorder.start();
+            recordButton.classList.add("recording");
+            recordButton.innerHTML = "⬛"; 
+            statusDiv.textContent = "Listening...";
+        } catch (err) {
+            console.error("Error accessing microphone:", err);
+            statusDiv.textContent = "Error: Allow microphone access.";
         }
+    }
 
-        async function sendAudio() {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            const formData = new FormData();
-            formData.append('audio', audioBlob);
-            formData.append("audio", audioBlob, "recording.webm");
+    function stopRecording() {
+        mediaRecorder.stop();
+        recordButton.classList.remove("recording");
+        recordButton.innerHTML = "🎤";
+        statusDiv.textContent = "Thinking...";
+        recordButton.disabled = true;
+    }
 
-            try {
-                const response = await fetch('/process_audio', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) throw new Error("Server Error");
+    async function sendAudioToServer() {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const formData = new FormData();
+        
+        // IMPORTANT: We give the file a name "recording.webm"
+        formData.append("audio", audioBlob, "recording.webm");
 
+        try {
+            const response = await fetch("/process_audio", {
+                method: "POST",
+                body: formData
+            });
+
+            if (response.ok) {
                 const audioBlobResponse = await response.blob();
                 const audioUrl = URL.createObjectURL(audioBlobResponse);
                 const audio = new Audio(audioUrl);
                 
-                status.innerText = "Speaking...";
+                statusDiv.textContent = "Speaking...";
                 audio.play();
-                audio.onended = () => status.innerText = "Tap to speak";
                 
-            } catch (error) {
-                console.error(error);
-                status.innerText = "Error. Try again.";
+                audio.onended = () => {
+                    statusDiv.textContent = "Tap mic to speak";
+                    recordButton.disabled = false;
+                };
+            } else {
+                const errText = await response.text();
+                console.error("Server Error:", errText);
+                statusDiv.textContent = "Error. Check logs.";
+                recordButton.disabled = false;
             }
+        } catch (error) {
+            console.error("Network Error:", error);
+            statusDiv.textContent = "Network error.";
+            recordButton.disabled = false;
         }
-    </script>
+    }
+</script>
 </body>
 
 </html>
+
