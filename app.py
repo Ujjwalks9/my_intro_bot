@@ -11,9 +11,9 @@ client = Groq(
     api_key=os.environ.get("GROQ_API_KEY")
 )
 
-# FIXED: We define this here so the function can use it later
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY")
 
+# --- PERSONALIZE THIS SECTION ---
 SYSTEM_PROMPT = """
 You are a helpful voice assistant representing a candidate named [YOUR NAME] for an internship.
 Your goal is to answer interview questions based ONLY on the context below.
@@ -36,45 +36,28 @@ def index():
 @app.route('/process_audio', methods=['POST'])
 def process_audio():
     try:
-        # Check if keys are present
         if not DEEPGRAM_API_KEY:
-            return jsonify({"error": "DEEPGRAM_API_KEY is missing in Environment Variables"}), 500
+            return jsonify({"error": "DEEPGRAM_API_KEY missing"}), 500
 
         # 1. Receive Audio File
         audio_file = request.files['audio']
-        filename = f"temp_{uuid.uuid4()}.webm"
+        # We force the extension to .webm so Groq knows how to handle it
+        filename = f"input_{uuid.uuid4()}.webm"
         audio_file.save(filename)
 
-        # 2. Speech-to-Text (Transcribe) using DEEPGRAM
-        deepgram_listen_url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true"
-        
-        listen_headers = {
-            "Authorization": f"Token {DEEPGRAM_API_KEY}",
-            "Content-Type": "audio/webm"
-        }
-
-        # FIX: Open the file we just saved to disk to ensure we send valid data
-        with open(filename, "rb") as audio_data:
-            response = requests.post(deepgram_listen_url, headers=listen_headers, data=audio_data)
-        
-        if response.status_code != 200:
-            raise Exception(f"Deepgram Listen Error: {response.text}")
-            
-        data = response.json()
-        
-        # Safely extract text
-        if 'results' in data and 'channels' in data['results']:
-            user_text = data['results']['channels'][0]['alternatives'][0]['transcript']
-        else:
-            user_text = ""
-        
-        # If no speech detected, handle gracefully
-        if not user_text:
-            user_text = "Hello" 
-            
+        # 2. Speech-to-Text (Transcribe) using GROQ (Whisper)
+        # We use Groq here because the library handles browser files better than raw requests
+        print("Transcribing...")
+        with open(filename, "rb") as file:
+            transcription = client.audio.transcriptions.create(
+                file=(filename, file.read()), # Tuple format (name, bytes) is CRITICAL here
+                model="whisper-large-v3",
+                response_format="text"
+            )
+        user_text = transcription
         print(f"User asked: {user_text}")
 
-        # 3. AI Intelligence (Generate Answer) using Groq
+        # 3. AI Intelligence (Generate Answer) using GROQ
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -85,11 +68,10 @@ def process_audio():
         ai_response = completion.choices[0].message.content
         print(f"AI Answer: {ai_response}")
 
-        # 4. Text-to-Speech (Generate Voice) using Deepgram API
-        # Model: aura-orion-en (Male Voice)
-        deepgram_speak_url = "https://api.deepgram.com/v1/speak?model=aura-orion-en"
+        # 4. Text-to-Speech (Generate Voice) using DEEPGRAM (Male Voice)
+        deepgram_url = "https://api.deepgram.com/v1/speak?model=aura-orion-en"
         
-        speak_headers = {
+        headers = {
             "Authorization": f"Token {DEEPGRAM_API_KEY}",
             "Content-Type": "application/json"
         }
@@ -98,15 +80,16 @@ def process_audio():
             "text": ai_response
         }
 
-        speak_response = requests.post(deepgram_speak_url, headers=speak_headers, json=payload)
+        # Request audio from Deepgram
+        response = requests.post(deepgram_url, headers=headers, json=payload)
         
-        if speak_response.status_code != 200:
-            raise Exception(f"Deepgram Speak Error: {speak_response.text}")
+        if response.status_code != 200:
+            raise Exception(f"Deepgram TTS Error: {response.text}")
 
         # Save audio
         output_audio = f"response_{uuid.uuid4()}.mp3"
         with open(output_audio, "wb") as f:
-            f.write(speak_response.content)
+            f.write(response.content)
 
         # Cleanup input file
         if os.path.exists(filename):
